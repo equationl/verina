@@ -18,6 +18,17 @@ enum class EventType(
         availableVariables = listOf("number", "state", "receiver", "timestamp", "formattedTime"),
         mockVariables = mapOf("number" to "13900139000", "state" to "ringing", "receiver" to "SIM 1 (中国移动)")
     ),
+    NOTIFICATION_POSTED(
+        displayName = "通知接收",
+        description = "当收到非持续通知时触发",
+        availableVariables = listOf("packageName", "appName", "title", "text", "timestamp", "formattedTime"),
+        mockVariables = mapOf(
+            "packageName" to "com.example.app",
+            "appName" to "示例应用",
+            "title" to "示例通知标题",
+            "text" to "这是一条示例通知"
+        )
+    ),
     BATTERY_LEVEL(
         displayName = "电量阈值",
         description = "当电池电量跨越指定阈值时触发（可选从高到低或从低到高）",
