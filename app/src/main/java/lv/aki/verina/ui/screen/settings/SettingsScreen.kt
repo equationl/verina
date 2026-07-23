@@ -58,6 +58,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 @Composable
 fun SettingsScreen(
     onNavigateBack: () -> Unit,
+    onNavigateToNotificationFilter: () -> Unit = {},
     viewModel: SettingsViewModel = viewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -247,6 +248,27 @@ fun SettingsScreen(
                         ) {
                             Text("授予通知读取权限")
                         }
+                    }
+                }
+            }
+
+            // Notification filter
+            if (notificationListenerEnabled) {
+                SectionTitle("通知过滤")
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = onNavigateToNotificationFilter
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            "应用通知过滤",
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Text(
+                            "选择哪些应用的通知会触发事件",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             }

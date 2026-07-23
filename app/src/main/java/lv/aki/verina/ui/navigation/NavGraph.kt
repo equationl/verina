@@ -9,11 +9,13 @@ import androidx.navigation.navArgument
 import lv.aki.verina.ui.screen.editor.RuleEditorScreen
 import lv.aki.verina.ui.screen.home.HomeScreen
 import lv.aki.verina.ui.screen.settings.SettingsScreen
+import lv.aki.verina.ui.screen.settings.notification.NotificationFilterScreen
 
 object Routes {
     const val HOME = "home"
     const val RULE_EDITOR = "rule_editor/{ruleId}"
     const val SETTINGS = "settings"
+    const val NOTIFICATION_FILTER = "notification_filter"
 
     fun ruleEditor(ruleId: Long = -1L) = "rule_editor/$ruleId"
 }
@@ -43,6 +45,14 @@ fun VerinaNavGraph(navController: NavHostController) {
         }
         composable(Routes.SETTINGS) {
             SettingsScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToNotificationFilter = {
+                    navController.navigate(Routes.NOTIFICATION_FILTER)
+                }
+            )
+        }
+        composable(Routes.NOTIFICATION_FILTER) {
+            NotificationFilterScreen(
                 onNavigateBack = { navController.popBackStack() }
             )
         }

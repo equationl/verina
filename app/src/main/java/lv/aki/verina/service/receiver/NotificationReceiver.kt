@@ -5,6 +5,10 @@ import android.content.pm.PackageManager
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import lv.aki.verina.data.db.AppDatabase
 import lv.aki.verina.data.model.EventType
 import lv.aki.verina.data.repository.RuleRepository
@@ -13,6 +17,11 @@ import lv.aki.verina.engine.RuleEngine
 class NotificationReceiver : NotificationListenerService() {
 
     private lateinit var ruleEngine: RuleEngine
+    private lateinit var db: AppDatabase
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    // 缓存启用的包名
+    private var enabledPackageNames: Set<String> = emptySet()
 
     // 用于去重的通知缓存：key -> 最后触发时间
     private val recentNotifications = mutableMapOf<String, Long>()
@@ -24,7 +33,27 @@ class NotificationReceiver : NotificationListenerService() {
 
     override fun onCreate() {
         super.onCreate()
-        ruleEngine = RuleEngine(RuleRepository(AppDatabase.getInstance(applicationContext)), applicationContext)
+        db = AppDatabase.getInstance(applicationContext)
+        ruleEngine = RuleEngine(RuleRepository(db), applicationContext)
+        loadEnabledPackages()
+    }
+
+    private fun loadEnabledPackages() {
+        scope.launch {
+            try {
+                val filterDao = db.notificationFilterDao()
+                // 如果没有过滤器配置，默认允许所有
+                if (filterDao.getCount() == 0) {
+                    enabledPackageNames = emptySet() // 空集表示允许所有
+                } else {
+                    enabledPackageNames = filterDao.getEnabledPackageNames().toSet()
+                }
+                Log.i(TAG, "Loaded ${enabledPackageNames.size} enabled packages")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to load enabled packages", e)
+                enabledPackageNames = emptySet()
+            }
+        }
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
@@ -39,6 +68,12 @@ class NotificationReceiver : NotificationListenerService() {
         // 过滤前台服务通知（如"XX正在运行"）
         if (notification.flags and Notification.FLAG_FOREGROUND_SERVICE != 0) {
             Log.d(TAG, "Skipping foreground service notification from ${sbn.packageName}")
+            return
+        }
+
+        // 应用通知过滤
+        if (enabledPackageNames.isNotEmpty() && sbn.packageName !in enabledPackageNames) {
+            Log.d(TAG, "Skipping notification from ${sbn.packageName} (not in filter)")
             return
         }
 
