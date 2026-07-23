@@ -32,21 +32,20 @@ object WebhookExecutor {
 
     suspend fun execute(action: ActionEntity, variables: Map<String, String>) {
         withContext(Dispatchers.IO) {
-            try {
-                val url = TemplateEngine.render(action.url, variables)
-                val headersJson = TemplateEngine.renderHeaders(action.headers, variables)
-                val headers = parseHeaders(headersJson)
+            val url = TemplateEngine.render(action.url, variables)
+            val headersJson = TemplateEngine.renderHeaders(action.headers, variables)
+            val headers = parseHeaders(headersJson)
 
-                val request = when (action.httpMethod.uppercase()) {
-                    "POST" -> buildPostRequest(url, headers, action.body, variables)
-                    else -> buildGetRequest(url, headers)
-                }
+            val request = when (action.httpMethod.uppercase()) {
+                "POST" -> buildPostRequest(url, headers, action.body, variables)
+                else -> buildGetRequest(url, headers)
+            }
 
-                client.newCall(request).execute().use { response ->
-                    Log.i(TAG, "Webhook ${action.httpMethod} $url -> ${response.code}")
+            client.newCall(request).execute().use { response ->
+                Log.i(TAG, "Webhook ${action.httpMethod} $url -> ${response.code}")
+                if (!response.isSuccessful) {
+                    throw RuntimeException("Webhook request failed with status ${response.code}")
                 }
-            } catch (e: Exception) {
-                Log.e(TAG, "Webhook execution failed for action ${action.id}", e)
             }
         }
     }

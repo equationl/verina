@@ -1,5 +1,6 @@
 package lv.aki.verina.engine
 
+import android.content.Context
 import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -10,15 +11,22 @@ import lv.aki.verina.data.model.ActionType
 import lv.aki.verina.data.model.EventType
 import lv.aki.verina.data.repository.RuleRepository
 import lv.aki.verina.service.action.WebhookExecutor
+import lv.aki.verina.service.retry.WebhookRetryManager
 import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-class RuleEngine(private val repository: RuleRepository) {
+class RuleEngine(
+    private val repository: RuleRepository,
+    private val context: Context? = null
+) {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val timeFormatter = SimpleDateFormat("yyyy/MM/dd HH:mm:ss", Locale.getDefault())
+    private val retryManager: WebhookRetryManager? by lazy {
+        context?.let { WebhookRetryManager.getInstance(it) }
+    }
 
     private fun timeVariables(): Map<String, String> {
         val now = System.currentTimeMillis()
@@ -30,7 +38,22 @@ class RuleEngine(private val repository: RuleRepository) {
 
     private suspend fun executeAction(action: ActionEntity, variables: Map<String, String>) {
         when (action.actionType) {
-            ActionType.WEBHOOK.name -> WebhookExecutor.execute(action, variables)
+            ActionType.WEBHOOK.name -> {
+                try {
+                    WebhookExecutor.execute(action, variables)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Webhook execution failed for action ${action.id}, enqueueing retry", e)
+                    retryManager?.enqueueRetry(
+                        actionId = action.id,
+                        url = action.url,
+                        httpMethod = action.httpMethod,
+                        headers = action.headers,
+                        body = action.body,
+                        variables = variables,
+                        error = e.message
+                    )
+                }
+            }
             else -> Log.w(TAG, "Unknown action type: ${action.actionType}, skipping")
         }
     }

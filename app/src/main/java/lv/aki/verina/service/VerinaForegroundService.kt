@@ -21,6 +21,7 @@ import lv.aki.verina.engine.RuleEngine
 import lv.aki.verina.service.receiver.BatteryReceiver
 import lv.aki.verina.service.receiver.PhoneCallReceiver
 import lv.aki.verina.service.receiver.SmsReceiver
+import lv.aki.verina.service.retry.WebhookRetryManager
 
 class VerinaForegroundService : Service() {
 
@@ -28,6 +29,7 @@ class VerinaForegroundService : Service() {
     private lateinit var smsReceiver: SmsReceiver
     private lateinit var phoneCallReceiver: PhoneCallReceiver
     private lateinit var batteryReceiver: BatteryReceiver
+    private lateinit var retryManager: WebhookRetryManager
 
     override fun onCreate() {
         super.onCreate()
@@ -35,7 +37,11 @@ class VerinaForegroundService : Service() {
 
         val db = AppDatabase.getInstance(applicationContext)
         val repository = RuleRepository(db)
-        ruleEngine = RuleEngine(repository)
+        ruleEngine = RuleEngine(repository, applicationContext)
+
+        // 启动重试管理器
+        retryManager = WebhookRetryManager.getInstance(applicationContext)
+        retryManager.start()
 
         smsReceiver = SmsReceiver(ruleEngine)
         phoneCallReceiver = PhoneCallReceiver(ruleEngine)
@@ -68,6 +74,7 @@ class VerinaForegroundService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         Log.i(TAG, "Service destroyed")
+        retryManager.stop()
         try {
             unregisterReceiver(smsReceiver)
             unregisterReceiver(phoneCallReceiver)

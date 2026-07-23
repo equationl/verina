@@ -8,12 +8,13 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
-    entities = [RuleEntity::class, ActionEntity::class],
-    version = 2,
+    entities = [RuleEntity::class, ActionEntity::class, WebhookRetryEntity::class],
+    version = 3,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun ruleDao(): RuleDao
+    abstract fun webhookRetryDao(): WebhookRetryDao
 
     companion object {
         @Volatile
@@ -26,6 +27,31 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS webhook_retry_queue (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        actionId INTEGER NOT NULL,
+                        url TEXT NOT NULL,
+                        httpMethod TEXT NOT NULL,
+                        headers TEXT NOT NULL DEFAULT '{}',
+                        body TEXT,
+                        variablesJson TEXT NOT NULL DEFAULT '{}',
+                        status TEXT NOT NULL DEFAULT 'PENDING',
+                        retryCount INTEGER NOT NULL DEFAULT 0,
+                        maxRetries INTEGER NOT NULL DEFAULT 10,
+                        nextRetryAt INTEGER NOT NULL DEFAULT 0,
+                        scheduledAt INTEGER NOT NULL DEFAULT 0,
+                        lastError TEXT,
+                        createdAt INTEGER NOT NULL DEFAULT 0
+                    )
+                """.trimIndent())
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_webhook_retry_queue_scheduledAt ON webhook_retry_queue (scheduledAt)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_webhook_retry_queue_status ON webhook_retry_queue (status)")
+            }
+        }
+
         fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
@@ -33,7 +59,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "verina_db"
                 )
-                    .addMigrations(MIGRATION_1_2)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                     .build()
                     .also { INSTANCE = it }
             }

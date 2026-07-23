@@ -24,7 +24,7 @@ class NotificationReceiver : NotificationListenerService() {
 
     override fun onCreate() {
         super.onCreate()
-        ruleEngine = RuleEngine(RuleRepository(AppDatabase.getInstance(applicationContext)))
+        ruleEngine = RuleEngine(RuleRepository(AppDatabase.getInstance(applicationContext)), applicationContext)
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
