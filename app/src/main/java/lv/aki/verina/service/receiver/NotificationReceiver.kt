@@ -71,6 +71,18 @@ class NotificationReceiver : NotificationListenerService() {
             return
         }
 
+        // 过滤分组摘要通知（如小米系统的 GroupSummary）
+        if (notification.flags and Notification.FLAG_GROUP_SUMMARY != 0) {
+            Log.d(TAG, "Skipping group summary notification from ${sbn.packageName}")
+            return
+        }
+
+        // 过滤小米焦点通知（通过 miui.focus.param 参数识别）
+        if (notification.extras.containsKey("miui.focus.param")) {
+            Log.d(TAG, "Skipping Xiaomi focus notification from ${sbn.packageName}")
+            return
+        }
+
         // 应用通知过滤
         if (enabledPackageNames.isNotEmpty() && sbn.packageName !in enabledPackageNames) {
             Log.d(TAG, "Skipping notification from ${sbn.packageName} (not in filter)")
@@ -84,6 +96,12 @@ class NotificationReceiver : NotificationListenerService() {
         // 过滤标题和内容都为空的通知
         if (title.isBlank() && text.isBlank()) {
             Log.d(TAG, "Skipping empty notification from ${sbn.packageName}")
+            return
+        }
+
+        // 过滤小米系统"XX正在运行"类型的后台服务提醒通知
+        if (title.contains("正在运行") && text.contains("点按即可了解详情或停止应用")) {
+            Log.d(TAG, "Skipping MIUI foreground service reminder from ${sbn.packageName}")
             return
         }
 
