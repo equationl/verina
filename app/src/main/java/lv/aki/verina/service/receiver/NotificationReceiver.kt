@@ -92,21 +92,23 @@ class NotificationReceiver : NotificationListenerService() {
         val extras = notification.extras
         val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: ""
         val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString() ?: ""
+        val bigText = extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString() ?: ""
+        val fullText = if (bigText.isNotBlank() && bigText != text) "$text\n$bigText" else text
 
         // 过滤标题和内容都为空的通知
-        if (title.isBlank() && text.isBlank()) {
+        if (title.isBlank() && fullText.isBlank()) {
             Log.d(TAG, "Skipping empty notification from ${sbn.packageName}")
             return
         }
 
         // 过滤小米系统"XX正在运行"类型的后台服务提醒通知
-        if (title.contains("正在运行") && text.contains("点按即可了解详情或停止应用")) {
+        if (title.contains("正在运行") && fullText.contains("点按即可了解详情或停止应用")) {
             Log.d(TAG, "Skipping MIUI foreground service reminder from ${sbn.packageName}")
             return
         }
 
         // 去重：1分钟内相同通知不重复触发
-        val dedupKey = "${sbn.packageName}|$title|$text"
+        val dedupKey = "${sbn.packageName}|$title|$fullText"
         val now = System.currentTimeMillis()
         val lastTriggerTime = recentNotifications[dedupKey]
         if (lastTriggerTime != null && now - lastTriggerTime < DEDUP_WINDOW_MS) {
@@ -126,7 +128,7 @@ class NotificationReceiver : NotificationListenerService() {
             "packageName" to sbn.packageName,
             "appName" to appName,
             "title" to title,
-            "text" to text
+            "text" to fullText
         )
 
         Log.i(TAG, "Notification received from $appName (${sbn.packageName})")
