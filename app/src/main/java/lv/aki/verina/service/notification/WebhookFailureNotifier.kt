@@ -34,6 +34,10 @@ object WebhookFailureNotifier {
         context: Context,
         actionId: Long,
         url: String,
+        httpMethod: String,
+        headers: String,
+        body: String?,
+        variablesJson: String,
         retryCount: Int,
         error: String?
     ) {
@@ -45,13 +49,27 @@ object WebhookFailureNotifier {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        val formattedBody = if (body.isNullOrBlank()) "（无）" else body
+        val formattedError = error ?: "未知错误"
+
+        val detailText = buildString {
+            appendLine("请求 $url 已失败 $retryCount 次，已放弃重试。")
+            appendLine("错误: $formattedError")
+            appendLine()
+            appendLine("请求详情:")
+            appendLine("方法: $httpMethod")
+            appendLine("Headers: $headers")
+            appendLine("Body: $formattedBody")
+            appendLine("变量: $variablesJson")
+        }
+
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle("Webhook 发送失败")
-            .setContentText("请求 $url 已失败 $retryCount 次")
+            .setContentText("$httpMethod $url 已失败 $retryCount 次")
             .setStyle(
                 NotificationCompat.BigTextStyle()
-                    .bigText("请求 $url 已失败 $retryCount 次，已放弃重试。\n错误: ${error ?: "未知错误"}")
+                    .bigText(detailText)
             )
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setContentIntent(pendingIntent)

@@ -148,6 +148,10 @@ class WebhookRetryManager(private val context: Context) {
                     context = context,
                     actionId = retry.actionId,
                     url = retry.url,
+                    httpMethod = retry.httpMethod,
+                    headers = retry.headers,
+                    body = retry.body,
+                    variablesJson = retry.variablesJson,
                     retryCount = newRetryCount,
                     error = error
                 )
