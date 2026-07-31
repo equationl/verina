@@ -53,14 +53,13 @@ object WebhookFailureNotifier {
         val formattedError = error ?: "未知错误"
 
         val detailText = buildString {
-            appendLine("请求 $url 已失败 $retryCount 次，已放弃重试。")
             appendLine("错误: $formattedError")
-            appendLine()
-            appendLine("请求详情:")
-            appendLine("方法: $httpMethod")
-            appendLine("Headers: $headers")
+            appendLine("请求详情($httpMethod):")
+//            appendLine("Headers: $headers")
             appendLine("Body: $formattedBody")
             appendLine("变量: $variablesJson")
+            appendLine("请求 $url 已失败 $retryCount 次，已放弃重试。")
+            appendLine()
         }
 
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)

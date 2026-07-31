@@ -42,13 +42,15 @@ class NotificationReceiver : NotificationListenerService() {
         scope.launch {
             try {
                 val filterDao = db.notificationFilterDao()
-                // 如果没有过滤器配置，默认允许所有
-                if (filterDao.getCount() == 0) {
-                    enabledPackageNames = emptySet() // 空集表示允许所有
-                } else {
-                    enabledPackageNames = filterDao.getEnabledPackageNames().toSet()
+                filterDao.getAllFilters().collect { filters ->
+                    // 如果没有过滤器配置，默认允许所有
+                    if (filters.isEmpty()) {
+                        enabledPackageNames = emptySet() // 空集表示允许所有
+                    } else {
+                        enabledPackageNames = filters.filter { it.enabled }.map { it.packageName }.toSet()
+                    }
+                    Log.i(TAG, "Loaded ${enabledPackageNames.size} enabled packages")
                 }
-                Log.i(TAG, "Loaded ${enabledPackageNames.size} enabled packages")
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to load enabled packages", e)
                 enabledPackageNames = emptySet()

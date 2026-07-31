@@ -15,8 +15,8 @@ interface NotificationFilterDao {
     @Query("SELECT * FROM notification_filter WHERE enabled = 1")
     suspend fun getEnabledFilters(): List<NotificationFilterEntity>
 
-    @Query("SELECT packageName FROM notification_filter WHERE enabled = 1")
-    suspend fun getEnabledPackageNames(): List<String>
+    @Query("SELECT packageName FROM notification_filter")
+    suspend fun getAllPackageNames(): List<String>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(filters: List<NotificationFilterEntity>)

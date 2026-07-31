@@ -132,7 +132,7 @@ class NotificationFilterViewModel(application: Application) : AndroidViewModel(a
                     hasLaunchableActivity(appInfo, pm)
                 }
 
-            val existingPackages = dao.getEnabledPackageNames().toSet()
+            val existingPackages = dao.getAllPackageNames().toSet()
             val newApps = installedApps
                 .filter { it.packageName !in existingPackages }
                 .map { appInfo ->
