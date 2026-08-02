@@ -7,9 +7,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import lv.aki.verina.data.db.ActionEntity
+import lv.aki.verina.data.db.RuleEntity
 import lv.aki.verina.data.model.ActionType
 import lv.aki.verina.data.model.EventType
+import lv.aki.verina.data.repository.RecordPreferences
 import lv.aki.verina.data.repository.RuleRepository
+import lv.aki.verina.data.repository.TransferRecordStore
 import lv.aki.verina.service.action.WebhookExecutor
 import lv.aki.verina.service.retry.WebhookRetryManager
 import org.json.JSONObject
@@ -27,6 +30,8 @@ class RuleEngine(
     private val retryManager: WebhookRetryManager? by lazy {
         context?.let { WebhookRetryManager.getInstance(it) }
     }
+    private val recordStore: TransferRecordStore? by lazy { context?.let(::TransferRecordStore) }
+    private val recordPreferences: RecordPreferences? by lazy { context?.let(::RecordPreferences) }
 
     private fun timeVariables(): Map<String, String> {
         val now = System.currentTimeMillis()
@@ -36,21 +41,42 @@ class RuleEngine(
         )
     }
 
-    private suspend fun executeAction(action: ActionEntity, variables: Map<String, String>) {
+    private suspend fun executeAction(
+        rule: RuleEntity,
+        action: ActionEntity,
+        eventType: EventType,
+        variables: Map<String, String>
+    ) {
         when (action.actionType) {
             ActionType.WEBHOOK.name -> {
-                try {
-                    WebhookExecutor.execute(action, variables)
+                val result = WebhookExecutor.execute(action, variables)
+                val keepAll = recordPreferences?.keepAllTransferRecords == true
+                val recordId = try {
+                    recordStore?.saveInitial(
+                        rule = rule,
+                        action = action,
+                        eventType = eventType.name,
+                        variables = variables,
+                        result = result,
+                        keepAll = keepAll,
+                        maxAttempts = WebhookRetryManager.MAX_ATTEMPTS
+                    )
                 } catch (e: Exception) {
-                    Log.e(TAG, "Webhook execution failed for action ${action.id}, enqueueing retry", e)
+                    Log.e(TAG, "Failed to save transfer record for action ${action.id}", e)
+                    null
+                }
+                if (!result.isSuccessful) {
+                    Log.e(TAG, "Webhook execution failed for action ${action.id}, enqueueing retry: ${result.error}")
                     retryManager?.enqueueRetry(
                         actionId = action.id,
+                        transferRecordId = recordId,
+                        keepRecord = keepAll,
                         url = action.url,
                         httpMethod = action.httpMethod,
                         headers = action.headers,
                         body = action.body,
                         variables = variables,
-                        error = e.message
+                        error = result.error
                     )
                 }
             }
@@ -66,7 +92,7 @@ class RuleEngine(
                 for (ruleWithActions in rules) {
                     val enrichedVars = variables + timeVariables()
                     for (action in ruleWithActions.actions.sortedBy { it.order }) {
-                        executeAction(action, enrichedVars)
+                        executeAction(ruleWithActions.rule, action, eventType, enrichedVars)
                     }
                 }
             } catch (e: Exception) {
@@ -103,7 +129,7 @@ class RuleEngine(
                             "threshold" to threshold.toString(),
                         ) + timeVariables()
                         for (action in ruleWithActions.actions.sortedBy { it.order }) {
-                            executeAction(action, variables)
+                            executeAction(ruleWithActions.rule, action, EventType.BATTERY_LEVEL, variables)
                         }
                     }
                 }

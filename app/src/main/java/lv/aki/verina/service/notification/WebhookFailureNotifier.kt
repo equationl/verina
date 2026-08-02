@@ -5,8 +5,10 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import androidx.core.app.NotificationCompat
+import lv.aki.verina.MainActivity
 import lv.aki.verina.R
 
 object WebhookFailureNotifier {
@@ -32,7 +34,7 @@ object WebhookFailureNotifier {
 
     fun showFailureNotification(
         context: Context,
-        actionId: Long,
+        failureRecordId: Long,
         url: String,
         httpMethod: String,
         headers: String,
@@ -43,9 +45,13 @@ object WebhookFailureNotifier {
     ) {
         createChannel(context)
 
-        val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
+        val launchIntent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            data = Uri.parse("verina://webhook-failure/$failureRecordId")
+            putExtra(MainActivity.EXTRA_FAILURE_RECORD_ID, failureRecordId)
+        }
         val pendingIntent = PendingIntent.getActivity(
-            context, 0, launchIntent,
+            context, failureRecordId.hashCode(), launchIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
@@ -76,7 +82,7 @@ object WebhookFailureNotifier {
             .build()
 
         val notificationManager = context.getSystemService(NotificationManager::class.java)
-        val notificationId = (NOTIFICATION_ID_BASE + actionId).toInt()
+        val notificationId = NOTIFICATION_ID_BASE + failureRecordId.hashCode()
         notificationManager.notify(notificationId, notification)
     }
 

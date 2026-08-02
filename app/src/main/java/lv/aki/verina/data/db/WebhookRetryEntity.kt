@@ -1,5 +1,6 @@
 package lv.aki.verina.data.db
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
@@ -11,6 +12,8 @@ import androidx.room.PrimaryKey
 data class WebhookRetryEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val actionId: Long,
+    val transferRecordId: Long? = null,
+    @ColumnInfo(defaultValue = "0") val keepRecord: Boolean = false,
     val url: String,
     val httpMethod: String,
     val headers: String = "{}",

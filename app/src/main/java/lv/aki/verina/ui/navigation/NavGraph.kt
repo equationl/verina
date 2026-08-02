@@ -7,6 +7,8 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import lv.aki.verina.ui.screen.editor.RuleEditorScreen
+import lv.aki.verina.ui.screen.failure.WebhookFailureDetailScreen
+import lv.aki.verina.ui.screen.failure.WebhookFailureListScreen
 import lv.aki.verina.ui.screen.home.HomeScreen
 import lv.aki.verina.ui.screen.settings.SettingsScreen
 import lv.aki.verina.ui.screen.settings.notification.NotificationFilterScreen
@@ -16,8 +18,11 @@ object Routes {
     const val RULE_EDITOR = "rule_editor/{ruleId}"
     const val SETTINGS = "settings"
     const val NOTIFICATION_FILTER = "notification_filter"
+    const val WEBHOOK_FAILURES = "webhook_failures"
+    const val WEBHOOK_FAILURE_DETAIL = "webhook_failure/{recordId}"
 
     fun ruleEditor(ruleId: Long = -1L) = "rule_editor/$ruleId"
+    fun webhookFailureDetail(recordId: Long) = "webhook_failure/$recordId"
 }
 
 @Composable
@@ -48,11 +53,30 @@ fun VerinaNavGraph(navController: NavHostController) {
                 onNavigateBack = { navController.popBackStack() },
                 onNavigateToNotificationFilter = {
                     navController.navigate(Routes.NOTIFICATION_FILTER)
+                },
+                onNavigateToWebhookFailures = {
+                    navController.navigate(Routes.WEBHOOK_FAILURES)
                 }
             )
         }
         composable(Routes.NOTIFICATION_FILTER) {
             NotificationFilterScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+        composable(Routes.WEBHOOK_FAILURES) {
+            WebhookFailureListScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToDetail = { recordId ->
+                    navController.navigate(Routes.webhookFailureDetail(recordId))
+                }
+            )
+        }
+        composable(
+            route = Routes.WEBHOOK_FAILURE_DETAIL,
+            arguments = listOf(navArgument("recordId") { type = NavType.LongType })
+        ) {
+            WebhookFailureDetailScreen(
                 onNavigateBack = { navController.popBackStack() }
             )
         }

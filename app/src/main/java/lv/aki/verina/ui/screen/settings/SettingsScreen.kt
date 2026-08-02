@@ -59,6 +59,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 fun SettingsScreen(
     onNavigateBack: () -> Unit,
     onNavigateToNotificationFilter: () -> Unit = {},
+    onNavigateToWebhookFailures: () -> Unit = {},
     viewModel: SettingsViewModel = viewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -270,6 +271,44 @@ fun SettingsScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
+                }
+            }
+
+            SectionTitle("Webhook")
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("保留所有转发记录", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            "开启后记录所有事件产生的成功、重试中和失败请求及响应信息",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = state.keepAllTransferRecords,
+                        onCheckedChange = viewModel::setKeepAllTransferRecords
+                    )
+                }
+            }
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                onClick = onNavigateToWebhookFailures
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        "转发记录",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Text(
+                        "筛选、排序、查看或清理转发请求和响应记录",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
 

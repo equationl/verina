@@ -5,6 +5,8 @@ import android.util.Log
 import kotlinx.coroutines.*
 import lv.aki.verina.data.db.AppDatabase
 import lv.aki.verina.data.db.WebhookRetryEntity
+import lv.aki.verina.data.repository.TransferRecordStore
+import lv.aki.verina.service.action.WebhookExecutionResult
 import lv.aki.verina.service.action.WebhookExecutor
 import lv.aki.verina.service.notification.WebhookFailureNotifier
 import org.json.JSONObject
@@ -37,10 +39,13 @@ class WebhookRetryManager(private val context: Context) {
                 INSTANCE ?: WebhookRetryManager(context.applicationContext).also { INSTANCE = it }
             }
         }
+
+        val MAX_ATTEMPTS: Int = RETRY_DELAYS.size + 1
     }
 
     private val db = AppDatabase.getInstance(context)
     private val retryDao = db.webhookRetryDao()
+    private val recordStore = TransferRecordStore(context)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var checkJob: Job? = null
 
@@ -49,6 +54,7 @@ class WebhookRetryManager(private val context: Context) {
 
         checkJob = scope.launch {
             Log.i(TAG, "Webhook retry manager started")
+            retryDao.trimExhausted()
             while (isActive) {
                 try {
                     processPendingRetries()
@@ -68,6 +74,8 @@ class WebhookRetryManager(private val context: Context) {
 
     suspend fun enqueueRetry(
         actionId: Long,
+        transferRecordId: Long?,
+        keepRecord: Boolean,
         url: String,
         httpMethod: String,
         headers: String,
@@ -80,6 +88,8 @@ class WebhookRetryManager(private val context: Context) {
 
         val retryEntity = WebhookRetryEntity(
             actionId = actionId,
+            transferRecordId = transferRecordId,
+            keepRecord = keepRecord,
             url = url,
             httpMethod = httpMethod,
             headers = headers,
@@ -112,7 +122,13 @@ class WebhookRetryManager(private val context: Context) {
                 processRetry(retry)
             } catch (e: Exception) {
                 Log.e(TAG, "Error processing retry ${retry.id}", e)
-                handleRetryFailure(retry, e.message)
+                handleRetryFailure(
+                    retry,
+                    WebhookExecutionResult(
+                        requestUrl = retry.url,
+                        error = e.message ?: e.javaClass.simpleName
+                    )
+                )
             }
         }
     }
@@ -121,47 +137,61 @@ class WebhookRetryManager(private val context: Context) {
         val variables = parseVariables(retry.variablesJson)
         val action = createActionEntity(retry)
 
-        try {
-            WebhookExecutor.execute(action, variables)
+        val result = WebhookExecutor.execute(action, variables)
+        if (result.isSuccessful) {
+            safelyFinishRecord(retry, result, retry.retryCount + 1, exhausted = false)
             // 成功，删除重试记录
             retryDao.updateStatus(retry.id, "COMPLETED")
             Log.i(TAG, "Retry ${retry.id} succeeded, removing from queue")
             // 清理已完成的记录
             scope.launch { cleanupCompletedRetries() }
-        } catch (e: Exception) {
-            Log.w(TAG, "Retry ${retry.id} failed: ${e.message}")
-            handleRetryFailure(retry, e.message)
+        } else {
+            Log.w(TAG, "Retry ${retry.id} failed: ${result.error}")
+            handleRetryFailure(retry, result)
         }
     }
 
-    private suspend fun handleRetryFailure(retry: WebhookRetryEntity, error: String?) {
+    private suspend fun handleRetryFailure(retry: WebhookRetryEntity, result: WebhookExecutionResult) {
         val newRetryCount = retry.retryCount + 1
+        val error = result.error
 
         if (newRetryCount >= retry.maxRetries) {
             // 达到最大重试次数，标记为耗尽
-            retryDao.markExhausted(retry.id, error)
+            retryDao.markExhaustedAndTrim(retry.id, newRetryCount, error)
+            val failureRecordId = safelyFinishRecord(
+                retry = retry,
+                result = result,
+                retryCount = newRetryCount,
+                exhausted = true
+            ) ?: retry.transferRecordId
             Log.w(TAG, "Retry ${retry.id} exhausted after $newRetryCount attempts")
 
             // 发送通知
             withContext(Dispatchers.Main) {
-                WebhookFailureNotifier.showFailureNotification(
-                    context = context,
-                    actionId = retry.actionId,
-                    url = retry.url,
-                    httpMethod = retry.httpMethod,
-                    headers = retry.headers,
-                    body = retry.body,
-                    variablesJson = retry.variablesJson,
-                    retryCount = newRetryCount,
-                    error = error
-                )
+                if (failureRecordId != null) {
+                    WebhookFailureNotifier.showFailureNotification(
+                        context = context,
+                        failureRecordId = failureRecordId,
+                        url = result.requestUrl,
+                        httpMethod = retry.httpMethod,
+                        headers = JSONObject(result.requestHeaders).toString(),
+                        body = result.requestBody,
+                        variablesJson = retry.variablesJson,
+                        retryCount = newRetryCount,
+                        error = error
+                    )
+                } else {
+                    WebhookFailureNotifier.showBatchFailureNotification(context, 1)
+                }
             }
         } else {
+            val recordId = safelyFinishRecord(retry, result, newRetryCount, exhausted = false)
             // 计算下次重试时间
             val delayMs = RETRY_DELAYS.getOrElse(newRetryCount) { RETRY_DELAYS.last() }
             val nextRetryAt = System.currentTimeMillis() + delayMs
 
             val updatedRetry = retry.copy(
+                transferRecordId = retry.transferRecordId ?: recordId,
                 retryCount = newRetryCount,
                 nextRetryAt = nextRetryAt,
                 status = "PENDING",
@@ -183,6 +213,18 @@ class WebhookRetryManager(private val context: Context) {
         }
     }
 
+    private suspend fun safelyFinishRecord(
+        retry: WebhookRetryEntity,
+        result: WebhookExecutionResult,
+        retryCount: Int,
+        exhausted: Boolean
+    ): Long? = try {
+        recordStore.finishRetry(retry, result, retryCount, exhausted)
+    } catch (e: Exception) {
+        Log.e(TAG, "Failed to update transfer record for retry ${retry.id}", e)
+        null
+    }
+
     private fun createActionEntity(retry: WebhookRetryEntity): lv.aki.verina.data.db.ActionEntity {
         return lv.aki.verina.data.db.ActionEntity(
             id = retry.actionId,
@@ -195,8 +237,7 @@ class WebhookRetryManager(private val context: Context) {
     }
 
     private suspend fun cleanupCompletedRetries() {
-        val oneDayAgo = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(1)
-        retryDao.deleteOldExhausted(oneDayAgo)
+        retryDao.deleteCompleted()
     }
 
     suspend fun getQueueStatus(): Pair<Int, Int> {

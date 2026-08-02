@@ -14,10 +14,12 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import lv.aki.verina.service.VerinaForegroundService
+import lv.aki.verina.data.repository.RecordPreferences
 
 data class SettingsUiState(
     val isServiceRunning: Boolean = false,
-    val isBatteryOptimizationIgnored: Boolean = false
+    val isBatteryOptimizationIgnored: Boolean = false,
+    val keepAllTransferRecords: Boolean = false
 )
 
 class SettingsViewModel(application: Application) : AndroidViewModel(application) {
@@ -31,7 +33,8 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             val pm = app.getSystemService(Context.POWER_SERVICE) as PowerManager
             _state.value = SettingsUiState(
                 isServiceRunning = isServiceRunning(),
-                isBatteryOptimizationIgnored = pm.isIgnoringBatteryOptimizations(app.packageName)
+                isBatteryOptimizationIgnored = pm.isIgnoringBatteryOptimizations(app.packageName),
+                keepAllTransferRecords = RecordPreferences(app).keepAllTransferRecords
             )
         }
     }
@@ -55,6 +58,11 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         }
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         context.startActivity(intent)
+    }
+
+    fun setKeepAllTransferRecords(enabled: Boolean) {
+        RecordPreferences(getApplication()).keepAllTransferRecords = enabled
+        _state.value = _state.value.copy(keepAllTransferRecords = enabled)
     }
 
     private fun isServiceRunning(): Boolean {
