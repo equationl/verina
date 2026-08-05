@@ -76,6 +76,9 @@ dependencies {
     // OkHttp
     implementation(libs.okhttp)
 
+    // JSON template parsing and serialization
+    implementation(libs.kotlinx.serialization.json)
+
     // Test
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

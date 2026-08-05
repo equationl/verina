@@ -52,7 +52,9 @@ object WebhookExecutor {
                 url = TemplateEngine.render(action.url, variables)
                 val headersJson = TemplateEngine.renderHeaders(action.headers, variables)
                 headers = parseHeaders(headersJson)
-                renderedBody = action.body?.let { TemplateEngine.render(it, variables) }
+                renderedBody = action.body?.let { body ->
+                    renderBody(body, headers, variables)
+                }
 
                 val request = when (action.httpMethod.uppercase()) {
                     "POST" -> buildPostRequest(url, headers, renderedBody)
@@ -97,12 +99,15 @@ object WebhookExecutor {
             try {
                 val headersJson = TemplateEngine.renderHeaders(action.headers, variables)
                 val headers = parseHeaders(headersJson)
+                val renderedBody = action.body?.let { body ->
+                    renderBody(body, headers, variables)
+                }
 
                 val request = when (action.httpMethod.uppercase()) {
                     "POST" -> buildPostRequest(
                         url,
                         headers,
-                        action.body?.let { TemplateEngine.render(it, variables) }
+                        renderedBody
                     )
                     else -> buildGetRequest(url, headers)
                 }
@@ -139,7 +144,7 @@ object WebhookExecutor {
         headers: Map<String, String>,
         renderedBody: String?
     ): Request {
-        val contentType = headers["Content-Type"] ?: "application/json"
+        val contentType = contentType(headers)
         val requestBody = (renderedBody ?: "").toRequestBody(contentType.toMediaTypeOrNull())
 
         return Request.Builder()
@@ -150,13 +155,43 @@ object WebhookExecutor {
     }
 
     private fun parseHeaders(json: String): Map<String, String> {
-        return try {
-            val obj = JSONObject(json)
-            buildMap {
-                obj.keys().forEach { key -> put(key, obj.getString(key)) }
+        val obj = try {
+            JSONObject(json.trim().ifBlank { "{}" })
+        } catch (e: Exception) {
+            throw IllegalArgumentException("请求头不是有效的 JSON 对象", e)
+        }
+
+        return buildMap {
+            obj.keys().forEach { key ->
+                put(key, obj.getString(key))
             }
-        } catch (_: Exception) {
-            emptyMap()
         }
     }
+
+    private fun renderBody(
+        body: String,
+        headers: Map<String, String>,
+        variables: Map<String, String>
+    ): String {
+        val rendered = if (isJsonContentType(headers)) {
+            if (body.isBlank()) "" else TemplateEngine.renderJson(body, variables)
+        } else {
+            TemplateEngine.render(body, variables)
+        }
+        return rendered
+    }
+
+    private fun isJsonContentType(headers: Map<String, String>): Boolean {
+        val contentType = contentType(headers)
+        return contentType.substringBefore(';').trim().equals("application/json", ignoreCase = true) ||
+            contentType.substringBefore(';').trim().endsWith("+json", ignoreCase = true)
+    }
+
+    private fun contentType(headers: Map<String, String>): String {
+        return headers.entries
+            .firstOrNull { it.key.equals("Content-Type", ignoreCase = true) }
+            ?.value
+            ?: "application/json"
+    }
+
 }
